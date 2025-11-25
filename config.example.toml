@@ -1,0 +1,29 @@
+# UniFi AP Reboot Script Configuration
+# Copy this file to config.toml and update with your actual values
+
+# Default credentials for any discovered APs not listed in known_aps
+default_username = "root"
+default_password = "your_default_password"
+
+# Known Access Points (ordered list)
+# APs will be rebooted in the order listed below
+# IMPORTANT: Put the main router/gateway LAST to maintain SSH connectivity
+
+[[known_aps]]
+mac = "94:2a:6f:00:11:22"
+name = "Kitchen"
+username = "root"
+password = "kitchen_password"
+
+[[known_aps]]
+mac = "94:2a:6f:33:44:55"
+name = "Bedroom"
+username = "root"
+password = "bedroom_password"
+
+[[known_aps]]
+mac = "f4:e2:c6:66:77:88"
+name = "Lounge"
+username = "admin"  # This AP uses different credentials
+password = "lounge_password"
+# This is the main router - it will be rebooted last

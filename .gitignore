@@ -1,1 +1,17 @@
 /settings.py
+
+# Configuration files with secrets
+/config.toml
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+env/
+*.egg-info/
+dist/
+build/
