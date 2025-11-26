@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+
+"""Reboot Access Points via SSH."""
+
 import subprocess
 import re
 import paramiko
@@ -49,7 +52,7 @@ def discover_mesh_aps():
         print("Install with: sudo apt install arp-scan", file=sys.stderr)
         return []
     
-    # Get known APs from config (now a list)
+    # Get known APs from config
     known_aps_list = config.get("known_aps", [])
     
     # Create a lookup dict by MAC for easy access
@@ -60,21 +63,18 @@ def discover_mesh_aps():
     lines = output.split('\n')
     
     for line in lines:
-        # Look for Ubiquiti MAC addresses
+        # Look for AP MAC addresses
         mac_match = re.search(r'([0-9a-fA-F]{2}[:-]){5}([0-9a-fA-F]{2})', line)
         if mac_match:
             mac = mac_match.group(0).lower()
             
-            # Check if it's a known AP or Ubiquiti device
-            if (not known_aps_dict or mac in known_aps_dict) or \
-               mac.startswith('94:2a:6f') or mac.startswith('f4:e2:c6'):
-                
-                # Extract IP from same line
+            # Check if it's an AP we care about
+            if mac in known_aps_dict:
+                # Extract IP
                 ip_match = re.search(r'\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b', line)
                 
                 if ip_match:
                     ip = ip_match.group(0)
-                    # Get AP config if available
                     ap_config = known_aps_dict.get(mac, {})
                     discovered[mac] = {
                         "ip": ip,
@@ -91,7 +91,7 @@ def discover_mesh_aps():
         mac = ap_config["mac"].lower()
         if mac in discovered:
             ordered_devices.append(discovered[mac])
-            del discovered[mac]  # Remove from dict
+            del discovered[mac]
     
     return ordered_devices
 
@@ -110,7 +110,6 @@ def reboot_ap_ssh(ap):
         print(f"Connecting to {name} at {ip} ({mac})...")
         ssh.connect(ip, username=username, password=password, timeout=10, allow_agent=False)
         
-        # Send reboot command
         stdin, stdout, stderr = ssh.exec_command("reboot")
         print(f"✓ Reboot command sent to {name} at {ip}")
         
@@ -122,19 +121,17 @@ def reboot_ap_ssh(ap):
         return False
 
 def main():
-    # Discover APs using arp-scan
     aps = discover_mesh_aps()
     
     if not aps:
         print("\nNo mesh APs discovered!", file=sys.stderr)
         sys.exit(1)
     
-    print(f"\nFound {len(aps)} AP(s). Rebooting...")
+    print(f"\nFound {len(aps)} AP(s). Rebooting them...")
     
     # Reboot each AP
     for ap in aps:
         reboot_ap_ssh(ap)
-        time.sleep(2)  # Brief delay between reboots
-
+ 
 if __name__ == "__main__":
     main()
