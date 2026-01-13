@@ -41,7 +41,7 @@ def discover_mesh_aps():
     
     try:
         result = subprocess.run(
-            ["sudo", "arp-scan", "--localnet"],
+            ["arp-scan", "--localnet"],
             capture_output=True,
             text=True,
             timeout=30
