@@ -6,7 +6,6 @@ import subprocess
 import re
 import paramiko
 import sys
-import time
 import os
 import tomllib
 
