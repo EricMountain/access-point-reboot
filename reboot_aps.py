@@ -24,10 +24,6 @@ def load_config():
         return tomllib.load(f)
 
 
-# Load configuration
-config = load_config()
-
-
 def discover_mesh_aps():
     """Discover mesh APs on the network using ARP scan"""
     print("Scanning network for mesh APs...")
@@ -134,4 +130,5 @@ def main():
 
 
 if __name__ == "__main__":
+    config = load_config()
     main()
