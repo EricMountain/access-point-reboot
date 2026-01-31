@@ -51,7 +51,8 @@ def discover_mesh_aps():
     known_aps_list = config.get("known_aps", [])
 
     # Create a lookup dict by MAC for easy access for those entries that define a MAC
-    known_aps_dict = {ap.get("mac", "").lower(): ap for ap in known_aps_list if ap.get("mac")}
+    known_aps_dict = {ap.get("mac", "").lower(
+    ): ap for ap in known_aps_list if ap.get("mac")}
 
     # Parse IPs and MACs from arp-scan output
     discovered = {}  # Use dict to avoid duplicates, keyed by MAC
@@ -80,7 +81,8 @@ def discover_mesh_aps():
                     "username": ap_config.get("username", config.get("default_username", "root")),
                     "password": ap_config.get("password", config.get("default_password", ""))
                 }
-                print(f"Found AP: {ip} ({mac}) - {ap_config.get('name', 'Unknown')}")
+                print(
+                    f"Found AP: {ip} ({mac}) - {ap_config.get('name', 'Unknown')}")
 
     # Return devices in the order specified in config, falling back to configured IPs
     ordered_devices = []
@@ -104,12 +106,26 @@ def discover_mesh_aps():
                 "username": ap_config.get("username", config.get("default_username", "root")),
                 "password": ap_config.get("password", config.get("default_password", ""))
             })
-            print(f"Using configured IP for {ap_config.get('name', 'Unknown')}: {ip_cfg} (not found via arp-scan)")
+            print(
+                f"Using configured IP for {ap_config.get('name', 'Unknown')}: {ip_cfg} (not found via arp-scan)")
             continue
 
         # If neither discovered nor ip provided, warn and skip
         if mac:
-            print(f"Warning: {ap_config.get('name', 'Unknown')} ({mac}) not found via arp-scan and no 'ip' configured; skipping.", file=sys.stderr)
+            print(
+                f"Warning: {ap_config.get('name', 'Unknown')} ({mac}) not found via arp-scan and no 'ip' configured; skipping.", file=sys.stderr)
+
+    # Print final ordered devices for visibility
+    if ordered_devices:
+        print("\nFinal ordered device list:")
+        for idx, d in enumerate(ordered_devices, 1):
+            name = d.get("name", "Unknown")
+            ip = d.get("ip", "<no-ip>")
+            mac = d.get("mac", "")
+            mac_display = mac if mac else "(no MAC)"
+            print(f"  {idx}. {name} — {ip} ({mac_display})")
+    else:
+        print("No devices will be acted on.")
 
     return ordered_devices
 
