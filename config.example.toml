@@ -8,6 +8,8 @@ default_password = "your_default_password"
 # Known Access Points (ordered list)
 # APs will be rebooted in the order listed below
 # Put the main router/gateway last to maintain SSH connectivity
+# Optional: you can provide an `ip` for a device; if it's not discovered by arp-scan,
+# the script will fall back to the configured IP so it can still be reached.
 
 [[known_aps]]
 mac = "94:2a:6f:00:11:22"
@@ -24,6 +26,7 @@ password = "bedroom_password"
 [[known_aps]]
 mac = "f4:e2:c6:66:77:88"
 name = "Lounge"
+ip = "192.168.1.10"          # Optional fallback if arp-scan doesn't find the device
 username = "admin"           # This AP uses different credentials
 password = "lounge_password"
 # This is the main router - it will be rebooted last

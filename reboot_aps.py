@@ -26,7 +26,11 @@ def load_config():
 
 
 def discover_mesh_aps():
-    """Discover mesh APs on the network using ARP scan"""
+    """Discover mesh APs on the network using ARP scan.
+
+    If an AP is not discovered via ARP but the config provides an `ip`,
+    fall back to using that IP so the script can still reach it.
+    """
     print("Scanning network for mesh APs...")
 
     try:
@@ -40,50 +44,72 @@ def discover_mesh_aps():
     except (subprocess.TimeoutExpired, FileNotFoundError) as e:
         print(f"arp-scan failed: {e}", file=sys.stderr)
         print("Install with: sudo apt install arp-scan", file=sys.stderr)
-        return []
+        # Continue with empty output so devices with configured `ip` can be used
+        output = ""
 
     # Get known APs from config
     known_aps_list = config.get("known_aps", [])
 
-    # Create a lookup dict by MAC for easy access
-    known_aps_dict = {ap["mac"].lower(): ap for ap in known_aps_list}
+    # Create a lookup dict by MAC for easy access for those entries that define a MAC
+    known_aps_dict = {ap.get("mac", "").lower(): ap for ap in known_aps_list if ap.get("mac")}
 
-    # Parse IPs and MACs
+    # Parse IPs and MACs from arp-scan output
     discovered = {}  # Use dict to avoid duplicates, keyed by MAC
     lines = output.split('\n')
 
     for line in lines:
-        # Look for AP MAC addresses
+        # Look for MAC addresses
         mac_match = re.search(r'([0-9a-fA-F]{2}[:-]){5}([0-9a-fA-F]{2})', line)
-        if mac_match:
-            mac = mac_match.group(0).lower()
+        if not mac_match:
+            continue
 
-            # Check if it's an AP we care about
-            if mac in known_aps_dict:
-                # Extract IP
-                ip_match = re.search(
-                    r'\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b', line)
+        mac = mac_match.group(0).lower()
 
-                if ip_match:
-                    ip = ip_match.group(0)
-                    ap_config = known_aps_dict.get(mac, {})
-                    discovered[mac] = {
-                        "ip": ip,
-                        "mac": mac,
-                        "name": ap_config.get("name", "Unknown"),
-                        "username": ap_config.get("username", config.get("default_username", "root")),
-                        "password": ap_config.get("password", config.get("default_password", ""))
-                    }
-                    print(
-                        f"Found AP: {ip} ({mac}) - {ap_config.get('name', 'Unknown')}")
+        # Check if it's an AP we care about
+        if mac in known_aps_dict:
+            # Extract IP
+            ip_match = re.search(r'\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b', line)
 
-    # Return devices in the order specified in config
+            if ip_match:
+                ip = ip_match.group(0)
+                ap_config = known_aps_dict.get(mac, {})
+                discovered[mac] = {
+                    "ip": ip,
+                    "mac": mac,
+                    "name": ap_config.get("name", "Unknown"),
+                    "username": ap_config.get("username", config.get("default_username", "root")),
+                    "password": ap_config.get("password", config.get("default_password", ""))
+                }
+                print(f"Found AP: {ip} ({mac}) - {ap_config.get('name', 'Unknown')}")
+
+    # Return devices in the order specified in config, falling back to configured IPs
     ordered_devices = []
     for ap_config in known_aps_list:
-        mac = ap_config["mac"].lower()
-        if mac in discovered:
-            ordered_devices.append(discovered[mac])
-            del discovered[mac]
+        mac = ap_config.get("mac")
+        ip_cfg = ap_config.get("ip")
+
+        if mac:
+            mac_l = mac.lower()
+            if mac_l in discovered:
+                ordered_devices.append(discovered[mac_l])
+                continue
+
+        # If not discovered by mac, but an IP is provided in config, use it
+        if ip_cfg:
+            # Use the mac if provided in config, otherwise set to an empty string
+            ordered_devices.append({
+                "ip": ip_cfg,
+                "mac": (mac.lower() if mac else ""),
+                "name": ap_config.get("name", "Unknown"),
+                "username": ap_config.get("username", config.get("default_username", "root")),
+                "password": ap_config.get("password", config.get("default_password", ""))
+            })
+            print(f"Using configured IP for {ap_config.get('name', 'Unknown')}: {ip_cfg} (not found via arp-scan)")
+            continue
+
+        # If neither discovered nor ip provided, warn and skip
+        if mac:
+            print(f"Warning: {ap_config.get('name', 'Unknown')} ({mac}) not found via arp-scan and no 'ip' configured; skipping.", file=sys.stderr)
 
     return ordered_devices
 
@@ -113,11 +139,13 @@ def check_ssh_connectivity(ap):
             print(f"✓ SSH connectivity confirmed for {name} at {ip}")
             return True
         else:
-            print(f"✗ SSH command failed for {name} at {ip}. stdout: {out}, stderr: {err}", file=sys.stderr)
+            print(
+                f"✗ SSH command failed for {name} at {ip}. stdout: {out}, stderr: {err}", file=sys.stderr)
             return False
 
     except Exception as e:
-        print(f"✗ SSH connectivity failed for {name} at {ip} ({mac}): {e}", file=sys.stderr)
+        print(
+            f"✗ SSH connectivity failed for {name} at {ip} ({mac}): {e}", file=sys.stderr)
         return False
 
 
@@ -153,8 +181,10 @@ def reboot_ap_ssh(ap, dry_run=False):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Reboot mesh APs or perform a dry-run to confirm discovery and SSH connectivity.")
-    parser.add_argument('--dry-run', '-n', action='store_true', help='Do not reboot; only check AP discovery and SSH connectivity')
+    parser = argparse.ArgumentParser(
+        description="Reboot mesh APs or perform a dry-run to confirm discovery and SSH connectivity.")
+    parser.add_argument('--dry-run', '-n', action='store_true',
+                        help='Do not reboot; only check AP discovery and SSH connectivity')
     args = parser.parse_args()
 
     aps = discover_mesh_aps()
@@ -164,7 +194,8 @@ def main():
         sys.exit(1)
 
     if args.dry_run:
-        print(f"\nFound {len(aps)} AP(s). Performing dry-run (checking SSH connectivity)...")
+        print(
+            f"\nFound {len(aps)} AP(s). Performing dry-run (checking SSH connectivity)...")
         results = []
         for ap in aps:
             ok = reboot_ap_ssh(ap, dry_run=True)
@@ -173,7 +204,8 @@ def main():
             print("\n✅ Dry-run successful: all APs discovered and SSH reachable.")
             sys.exit(0)
         else:
-            print("\n⚠️ Dry-run found connectivity failures. See errors above.", file=sys.stderr)
+            print(
+                "\n⚠️ Dry-run found connectivity failures. See errors above.", file=sys.stderr)
             sys.exit(2)
     else:
         print(f"\nFound {len(aps)} AP(s). Rebooting them...")
