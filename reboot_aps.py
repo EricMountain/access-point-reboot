@@ -8,6 +8,7 @@ import paramiko
 import sys
 import os
 import tomllib
+import argparse
 
 
 # Load configuration from config.toml
@@ -87,8 +88,44 @@ def discover_mesh_aps():
     return ordered_devices
 
 
-def reboot_ap_ssh(ap):
-    """Reboot an AP via SSH"""
+def check_ssh_connectivity(ap):
+    """Check SSH connectivity to an AP without rebooting."""
+    ip = ap["ip"]
+    mac = ap["mac"]
+    name = ap.get("name", "Unknown")
+    username = ap["username"]
+    password = ap["password"]
+
+    try:
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+        print(f"Checking SSH to {name} at {ip} ({mac})...")
+        ssh.connect(ip, username=username, password=password,
+                    timeout=10, allow_agent=False)
+
+        stdin, stdout, stderr = ssh.exec_command("echo SSH_OK", timeout=10)
+        out = stdout.read().decode().strip()
+        err = stderr.read().decode().strip()
+        ssh.close()
+
+        if "SSH_OK" in out:
+            print(f"✓ SSH connectivity confirmed for {name} at {ip}")
+            return True
+        else:
+            print(f"✗ SSH command failed for {name} at {ip}. stdout: {out}, stderr: {err}", file=sys.stderr)
+            return False
+
+    except Exception as e:
+        print(f"✗ SSH connectivity failed for {name} at {ip} ({mac}): {e}", file=sys.stderr)
+        return False
+
+
+def reboot_ap_ssh(ap, dry_run=False):
+    """Reboot an AP via SSH or check connectivity in dry-run mode."""
+    if dry_run:
+        return check_ssh_connectivity(ap)
+
     ip = ap["ip"]
     mac = ap["mac"]
     name = ap.get("name", "Unknown")
@@ -116,17 +153,33 @@ def reboot_ap_ssh(ap):
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Reboot mesh APs or perform a dry-run to confirm discovery and SSH connectivity.")
+    parser.add_argument('--dry-run', '-n', action='store_true', help='Do not reboot; only check AP discovery and SSH connectivity')
+    args = parser.parse_args()
+
     aps = discover_mesh_aps()
 
     if not aps:
         print("\nNo mesh APs discovered!", file=sys.stderr)
         sys.exit(1)
 
-    print(f"\nFound {len(aps)} AP(s). Rebooting them...")
-
-    # Reboot each AP
-    for ap in aps:
-        reboot_ap_ssh(ap)
+    if args.dry_run:
+        print(f"\nFound {len(aps)} AP(s). Performing dry-run (checking SSH connectivity)...")
+        results = []
+        for ap in aps:
+            ok = reboot_ap_ssh(ap, dry_run=True)
+            results.append(ok)
+        if all(results):
+            print("\n✅ Dry-run successful: all APs discovered and SSH reachable.")
+            sys.exit(0)
+        else:
+            print("\n⚠️ Dry-run found connectivity failures. See errors above.", file=sys.stderr)
+            sys.exit(2)
+    else:
+        print(f"\nFound {len(aps)} AP(s). Rebooting them...")
+        # Reboot each AP
+        for ap in aps:
+            reboot_ap_ssh(ap)
 
 
 if __name__ == "__main__":
